@@ -33,23 +33,32 @@ jobs:
         go mod tidy
         go build -o fsb ./cmd/fsb
 
+
     - name: Start Tunnel & Stream
       env:
         WORKER_URL: ${{ secrets.WORKER_URL }}
         WORKER_KEY: ${{ secrets.WORKER_KEY }}
       run: |
-        # ১. টানেল স্টার্ট করা
-        cloudflared tunnel --url http://127.0.0.1:8080 > cf.log 2>&1 &
+        # ১. localhost.run টানেল স্টার্ট করা (Cloudflare এর চেয়ে হালকা)
+        # এটি কোনো ইন্সটলেশন ছাড়াই চলে
+        ssh -o StrictHostKeyChecking=no -R 80:localhost:8080 nokey@localhost.run > tunnel.log 2>&1 &
         echo "⏳ Tunnel Starting..."
         sleep 10
         
         # ২. টানেল লিংক বের করা
-        TUNNEL_URL=$(grep -o 'https://.*\.trycloudflare.com' cf.log | head -1)
-        echo "🔗 Tunnel URL: $TUNNEL_URL"
+        # localhost.run এর আউটপুট থেকে https লিংক খুঁজে বের করা
+        TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.lhr\.life' tunnel.log | head -1)
+        
+        # ব্যাকআপ: যদি lhr.life ডোমেইন না দেয়, অন্য ফরম্যাট চেক
+        if [ -z "$TUNNEL_URL" ]; then
+            TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.localhost\.run' tunnel.log | head -1)
+        fi
+        
+        echo "🔗 Speed Tunnel URL: $TUNNEL_URL"
         
         if [ -z "$TUNNEL_URL" ]; then
           echo "❌ Tunnel Failed! Logs:"
-          cat cf.log
+          cat tunnel.log
           exit 1
         fi
         
@@ -59,13 +68,15 @@ jobs:
         # ৪. বট রান করা (সিক্রেট আনাসহ)
         SECRETS=$(curl -s "$WORKER_URL?key=$WORKER_KEY")
         
-        # JSON পার্স করার জন্য jq ব্যবহার
         export API_ID=$(echo $SECRETS | jq -r '.data.API_ID')
         export API_HASH=$(echo $SECRETS | jq -r '.data.API_HASH')
         export BOT_TOKEN=$(echo $SECRETS | jq -r '.data.BOT_TOKEN')
         export LOG_CHANNEL=$(echo $SECRETS | jq -r '.data.LOG_CHANNEL')
         export PORT=8080
         export HOST=$WORKER_URL
+        
+        cd bot
+        ./fsb run
         
         cd bot
         ./fsb run
