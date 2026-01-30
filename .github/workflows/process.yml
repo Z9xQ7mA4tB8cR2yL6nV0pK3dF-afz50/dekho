@@ -1,4 +1,4 @@
-name: Data Process
+name: Stream Process
 
 on:
   workflow_dispatch:
@@ -11,60 +11,63 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: 🛠️ Start Stream (Cloudflare Edition)
+    - name: 🚀 High Performance Stream
       env:
         WORKER_URL: ${{ secrets.WORKER_URL }}
         WORKER_KEY: ${{ secrets.WORKER_KEY }}
-        # Playit এর সিক্রেট আর লাগবে না
       run: |
         # ========================================================
-        # 1. CLOUDFLARE TUNNEL INSTALL & START
+        # 1. NETWORK OPTIMIZATION (BBR & TCP TWEAKS)
         # ========================================================
-        echo ">>> [1/5] Setting up Cloudflare Tunnel..."
+        echo ">>> [1/5] Boosting Network Speed..."
+        sudo sysctl -w net.core.default_qdisc=fq
+        sudo sysctl -w net.ipv4.tcp_congestion_control=bbr
+        sudo sysctl -w net.ipv4.tcp_window_scaling=1
+        sudo sysctl -w net.core.rmem_max=26214400
+        sudo sysctl -w net.core.wmem_max=26214400
         
-        # Cloudflare ডাউনলোড
+        # ========================================================
+        # 2. CLOUDFLARE TUNNEL (HTTP2 ENABLED)
+        # ========================================================
+        echo ">>> [2/5] Starting Optimized Tunnel..."
+        
         curl -L -o cloudflared-linux-amd64 "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
         chmod +x cloudflared-linux-amd64
         
-        # টানেল রান করা (8080 পোর্টের জন্য)
-        nohup ./cloudflared-linux-amd64 tunnel --url http://localhost:8080 > cf.log 2>&1 &
+        # --protocol http2 যোগ করা হয়েছে যা স্ট্রিমিংয়ের জন্য ফাস্ট
+        nohup ./cloudflared-linux-amd64 tunnel --protocol http2 --url http://localhost:8080 > cf.log 2>&1 &
         
-        echo "⏳ Waiting for Cloudflare URL (10s)..."
+        echo "⏳ Waiting for Tunnel (10s)..."
         sleep 10
         
-        # লগ থেকে লিংক বের করা
         CF_URL=$(grep -o 'https://.*\.trycloudflare.com' cf.log | head -1)
         
         if [ -z "$CF_URL" ]; then
-            echo "❌ Error: Cloudflare link not found. Retrying..."
+            echo "❌ Error: Tunnel failed, retrying..."
             sleep 5
             CF_URL=$(grep -o 'https://.*\.trycloudflare.com' cf.log | head -1)
         fi
         
         if [ -z "$CF_URL" ]; then
-            echo "❌ CRITICAL: Tunnel failed!"
+            echo "❌ CRITICAL: Tunnel could not start."
             cat cf.log
             exit 1
         fi
         
-        echo "✅ Tunnel Live: $CF_URL"
+        echo "✅ High Speed Tunnel: $CF_URL"
         
         # ========================================================
-        # 2. UPDATE WORKER DATABASE
+        # 3. UPDATE WORKER
         # ========================================================
-        echo ">>> [2/5] Updating Worker with URL..."
         curl -s "$WORKER_URL?key=$WORKER_KEY&update=$CF_URL"
         
         # ========================================================
-        # 3. BUILD BOT
+        # 4. BUILD BOT
         # ========================================================
-        echo ">>> [3/5] Building Bot..."
+        echo ">>> [4/5] Building Bot..."
         export PATH=$PATH:/usr/local/go/bin
         
-        # ক্লিনআপ
         if [ -d "TG-FileStream" ]; then rm -rf TG-FileStream; fi
-        
-        # ক্লোন ও বিল্ড
         git clone https://github.com/affaz101/TG-FileStream
         cd TG-FileStream
         go mod download
@@ -72,9 +75,9 @@ jobs:
         chmod +x fsb
         
         # ========================================================
-        # 4. FETCH CONFIG
+        # 5. CONFIGURE & RUN
         # ========================================================
-        echo ">>> [4/5] Fetching Settings..."
+        echo ">>> [5/5] Fetching Config & Running..."
         SECRETS_JSON=$(curl -s "$WORKER_URL?key=$WORKER_KEY")
         
         export API_ID=$(echo $SECRETS_JSON | jq -r '.data.API_ID')
@@ -82,14 +85,8 @@ jobs:
         export BOT_TOKEN=$(echo $SECRETS_JSON | jq -r '.data.BOT_TOKEN')
         export LOG_CHANNEL=$(echo $SECRETS_JSON | jq -r '.data.LOG_CHANNEL')
         
-        # ========================================================
-        # 5. START BOT
-        # ========================================================
         export PORT=8080
         export HOST="$CF_URL"
         export USE_SESSION_FILE=false
-        
-        echo ">>> [5/5] 🚀 Starting Bot..."
-        echo "🔗 Public Link: $HOST"
         
         ./fsb run
