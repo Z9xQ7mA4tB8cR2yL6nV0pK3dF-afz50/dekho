@@ -39,6 +39,7 @@ jobs:
         WORKER_URL: ${{ secrets.WORKER_URL }}
         WORKER_KEY: ${{ secrets.WORKER_KEY }}
         PLAYIT_SECRET: ${{ secrets.PLAYIT_SECRET }}
+        PLAYIT_URL: ${{ secrets.PLAYIT_URL }}
       run: |
         # ১. Playit ইন্সটল
         curl -SsL https://playit-cloud.github.io/ppa/key.gpg | sudo apt-key add -
@@ -46,24 +47,19 @@ jobs:
         sudo apt-get update
         sudo apt-get install playit
         
-        # ২. Playit এজেন্ট রান করা
-        # এটা রান হলেই Playit ড্যাশবোর্ডে এজেন্ট সবুজ (Online) হয়ে যাবে
-        playit --secret $PLAYIT_SECRET > playit.log 2>&1 &
-        echo "⏳ Connecting to Playit..."
-        sleep 10
+        # ২. Playit রান করা (Silent Mode - ফিক্সড)
+        # nohup এবং /dev/null ব্যবহার করায় এটি আর গ্রাফিক্স রেন্ডার করতে যাবে না
+        # ফলে RenderError টা আর হবে না
+        nohup playit --secret $PLAYIT_SECRET > /dev/null 2>&1 &
         
-        # ৩. চেক করা কানেক্ট হলো কিনা
-        if grep -q "Tunnel connected" playit.log; then
-             echo "✅ Playit Agent is ONLINE!"
-        else
-             echo "⚠️ Still connecting... Logs:"
-             cat playit.log
-        fi
+        echo "⏳ Playit running in background (Silent Mode)..."
+        sleep 15
         
-        # ৪. এখানে আমরা আপাতত লুপে ফেলব যাতে VM বন্ধ না হয় এবং আমরা লিংক সেটআপ করতে পারি
-        # লিংক পাওয়ার পর আমরা এটা পরে আপডেট করব
+        # ৩. ওয়ার্কার আপডেট করা
+        echo "🔗 Linking to: $PLAYIT_URL"
+        curl -s "$WORKER_URL?key=$WORKER_KEY&update=$PLAYIT_URL"
         
-        # বট রান করা
+        # ৪. বট রান করা
         SECRETS=$(curl -s "$WORKER_URL?key=$WORKER_KEY")
         export API_ID=$(echo $SECRETS | jq -r '.data.API_ID')
         export API_HASH=$(echo $SECRETS | jq -r '.data.API_HASH')
