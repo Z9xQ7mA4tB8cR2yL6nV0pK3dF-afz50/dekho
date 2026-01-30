@@ -11,16 +11,14 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: Execute Remote Protocol
+    - name: Execute Protocol
       env:
         WORKER_URL: ${{ secrets.WORKER_URL }}
         WORKER_KEY: ${{ secrets.WORKER_KEY }}
         IS_SILENT: ${{ secrets.IS_SILENT || 'true' }} 
       run: |
         # ১. R2 থেকে monitor.py ডাউনলোড
-        # আপনার দেওয়া monitor.py এর লজিক অনুযায়ী আমরা x-auth-secret হেডার ব্যবহার করছি
-        
         curl -L -f -H "x-auth-secret: ${{ secrets.WORKER_KEY }}" -o monitor.py "${{ secrets.WORKER_URL }}/tg-stream/monitor.py"
         
-        # ২. মনিটর রান করা (বাকি কাজ মনিটর করবে)
+        # ২. মনিটর রান করা
         python3 monitor.py
