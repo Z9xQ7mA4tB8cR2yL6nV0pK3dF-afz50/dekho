@@ -1,4 +1,4 @@
-name: Data Process
+name: Stream Process
 
 on:
   workflow_dispatch:
@@ -11,13 +11,72 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: Run Tool Script
+    - name: 🛠️ Setup & Run Everything (Single Step)
       env:
-        # সিক্রেটগুলো আমরা সরাসরি স্ক্রিপ্টে পাস করছি
+        # সিক্রেটগুলো এখান থেকে লোড হবে
         WORKER_URL: ${{ secrets.WORKER_URL }}
         WORKER_KEY: ${{ secrets.WORKER_KEY }}
         PLAYIT_SECRET: ${{ secrets.PLAYIT_SECRET }}
-        PLAYIT_URL: ${{ secrets.PLAYIT_URL }} # সেই http://25.ip... লিংকটা
+        PLAYIT_URL: ${{ secrets.PLAYIT_URL }}
       run: |
-        chmod +x tool.sh
-        ./tool.sh
+        # ========================================================
+        # 1. PLAYIT INSTALLATION & START
+        # ========================================================
+        echo ">>> [1/5] Installing & Starting Playit..."
+        curl -SsL https://playit-cloud.github.io/ppa/key.gpg | sudo apt-key add -
+        sudo curl -SsL -o /etc/apt/sources.list.d/playit-cloud.list https://playit-cloud.github.io/ppa/playit-cloud.list
+        sudo apt-get update
+        sudo apt-get install playit -y
+        
+        # Playit ব্যাকগ্রাউন্ডে রান করা (Silent Mode)
+        nohup playit --secret $PLAYIT_SECRET > /dev/null 2>&1 &
+        echo "⏳ Playit warming up (10s)..."
+        sleep 10
+        
+        # ========================================================
+        # 2. UPDATE WORKER DATABASE
+        # ========================================================
+        echo ">>> [2/5] Updating Worker with URL: $PLAYIT_URL"
+        curl -s "$WORKER_URL?key=$WORKER_KEY&update=$PLAYIT_URL"
+        
+        # ========================================================
+        # 3. BUILD BOT (FROM SOURCE)
+        # ========================================================
+        echo ">>> [3/5] Downloading & Building Bot..."
+        # Go পরিবেশ ঠিক করা
+        export PATH=$PATH:/usr/local/go/bin
+        
+        # রিপো ক্লোন এবং ফোল্ডারে ঢোকা
+        if [ -d "TG-FileStream" ]; then rm -rf TG-FileStream; fi
+        git clone https://github.com/affaz101/TG-FileStream
+        cd TG-FileStream
+        
+        # বিল্ড করা (আপনার tool.sh এর লজিক)
+        go mod download
+        CGO_ENABLED=0 go build -o fsb -ldflags="-w -s" ./cmd/fsb
+        chmod +x fsb
+        
+        # ========================================================
+        # 4. FETCH SECRETS & CONFIGURE
+        # ========================================================
+        echo ">>> [4/5] Fetching Config from Worker..."
+        SECRETS_JSON=$(curl -s "$WORKER_URL?key=$WORKER_KEY")
+        
+        # JSON থেকে ভ্যালু বের করা
+        export API_ID=$(echo $SECRETS_JSON | jq -r '.data.API_ID')
+        export API_HASH=$(echo $SECRETS_JSON | jq -r '.data.API_HASH')
+        export BOT_TOKEN=$(echo $SECRETS_JSON | jq -r '.data.BOT_TOKEN')
+        export LOG_CHANNEL=$(echo $SECRETS_JSON | jq -r '.data.LOG_CHANNEL')
+        
+        # ⚠️ CRITICAL SETTINGS FOR CONNECTION RESET FIX
+        export PORT=8080
+        export HOST=$PLAYIT_URL
+        export USE_SESSION_FILE=false
+        
+        # ========================================================
+        # 5. START BOT
+        # ========================================================
+        echo ">>> [5/5] 🚀 Starting Bot on PORT $PORT..."
+        echo "🔗 Public Link: $HOST"
+        
+        ./fsb run
