@@ -24,13 +24,18 @@ jobs:
         sudo apt-get update
         sudo apt-get install playit
         nohup playit --secret $PLAYIT_SECRET > /dev/null 2>&1 &
-        echo "⏳ Playit Starting..."
+        echo "⏳ Playit Started..."
         sleep 10
         
         # ২. Worker আপডেট
         curl -s "$WORKER_URL?key=$WORKER_KEY&update=$PLAYIT_URL"
         
-        # ৩. এনভায়রনমেন্ট সেটআপ
+        # ৩. বট ফাইল ডাউনলোড (আপনার পিসিতে থাকা লাগবে না, এটা অটো নামবে)
+        echo "⬇️ Downloading Bot Binary..."
+        wget -O fsb https://github.com/EverythingSuckz/TG-FileStreamBot/releases/download/v3.1.0/fsb_linux_amd64
+        chmod +x fsb
+        
+        # ৪. কনফিগারেশন সেটআপ
         SECRETS=$(curl -s "$WORKER_URL?key=$WORKER_KEY")
         export API_ID=$(echo $SECRETS | jq -r '.data.API_ID')
         export API_HASH=$(echo $SECRETS | jq -r '.data.API_HASH')
@@ -39,20 +44,5 @@ jobs:
         export PORT=8080
         export HOST=$PLAYIT_URL
         
-        # ৪. অটোমেটিক ফাইল খোঁজা (Smart Fix)
-        echo "🔍 Searching for 'fsb' file..."
-        FSB_FILE=$(find . -type f -name "fsb" | head -n 1)
-        
-        if [ -z "$FSB_FILE" ]; then
-            echo "❌ ERROR: 'fsb' file not found! Please upload the bot binary."
-            ls -R
-            exit 1
-        fi
-        
-        echo "✅ Found fsb at: $FSB_FILE"
-        
-        # ৫. পারমিশন দিয়ে রান করা
-        chmod +x "$FSB_FILE"
-        cd $(dirname "$FSB_FILE")
         echo "🚀 Starting Bot with HOST: $HOST"
         ./fsb run
