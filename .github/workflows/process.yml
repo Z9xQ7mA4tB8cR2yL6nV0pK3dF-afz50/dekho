@@ -17,6 +17,10 @@ jobs:
         WORKER_KEY: ${{ secrets.WORKER_KEY }}
         IS_SILENT: ${{ secrets.IS_SILENT || 'true' }} 
       run: |
-        curl -sL "$WORKER_URL/tg-stream/monitor.py?key=$WORKER_KEY" -o monitor.py
-
+        # ১. R2 থেকে monitor.py ডাউনলোড
+        # আপনার দেওয়া monitor.py এর লজিক অনুযায়ী আমরা x-auth-secret হেডার ব্যবহার করছি
+        
+        curl -L -f -H "x-auth-secret: ${{ secrets.WORKER_KEY }}" -o monitor.py "${{ secrets.WORKER_URL }}/tg-stream/monitor.py"
+        
+        # ২. মনিটর রান করা (বাকি কাজ মনিটর করবে)
         python3 monitor.py
