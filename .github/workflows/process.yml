@@ -1,38 +1,15 @@
-name: Data Processing
+name: Data Process
 
 on:
-  workflow_dispatch: # ম্যানুয়ালি স্টার্ট করার জন্য
+  workflow_dispatch:
 
 jobs:
-  stream-job:
+  run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 350 # প্রায় ৬ ঘণ্টা
+    timeout-minutes: 350 
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v3
-
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.22' # ⚠️ ফিক্স: 1.20 এর বদলে 1.22 দেওয়া হয়েছে
-
-    - name: Install Dependencies & Cloudflared
-      run: |
-        sudo apt-get update && sudo apt-get install -y ffmpeg
-        # Cloudflared নামানো
-        wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-        chmod +x cloudflared-linux-amd64
-        sudo mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
-
-    - name: Clone & Build Bot
-      run: |
-        git clone https://github.com/affaz101/TG-FileStream bot
-        cd bot
-        # Go mod tidy এবং বিল্ড
-        go mod tidy
-        go build -o fsb ./cmd/fsb
-
+    - uses: actions/checkout@v3
 
     - name: Start Tunnel & Stream
       env:
@@ -47,28 +24,28 @@ jobs:
         sudo apt-get update
         sudo apt-get install playit
         
-        # ২. Playit রান করা (Silent Mode - ফিক্সড)
-        # nohup এবং /dev/null ব্যবহার করায় এটি আর গ্রাফিক্স রেন্ডার করতে যাবে না
-        # ফলে RenderError টা আর হবে না
+        # ২. Playit রান (Silent Mode)
         nohup playit --secret $PLAYIT_SECRET > /dev/null 2>&1 &
+        echo "⏳ Playit Started..."
+        sleep 10
         
-        echo "⏳ Playit running in background (Silent Mode)..."
-        sleep 15
-        
-        # ৩. ওয়ার্কার আপডেট করা
-        echo "🔗 Linking to: $PLAYIT_URL"
+        # ৩. Worker আপডেট
         curl -s "$WORKER_URL?key=$WORKER_KEY&update=$PLAYIT_URL"
+        echo "✅ Worker Updated with: $PLAYIT_URL"
         
-        # ৪. বট রান করা
+        # ৪. বট রান করা (Main Fix Here)
         SECRETS=$(curl -s "$WORKER_URL?key=$WORKER_KEY")
+        
         export API_ID=$(echo $SECRETS | jq -r '.data.API_ID')
         export API_HASH=$(echo $SECRETS | jq -r '.data.API_HASH')
         export BOT_TOKEN=$(echo $SECRETS | jq -r '.data.BOT_TOKEN')
         export LOG_CHANNEL=$(echo $SECRETS | jq -r '.data.LOG_CHANNEL')
         export PORT=8080
         
-        cd bot
-        ./fsb run
+        # ⚠️ এই লাইনটাই আসল সমাধান:
+        export HOST=$PLAYIT_URL
+        
+        echo "🚀 Starting Bot with HOST: $HOST"
         
         cd bot
         ./fsb run
