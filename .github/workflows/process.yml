@@ -38,44 +38,41 @@ jobs:
       env:
         WORKER_URL: ${{ secrets.WORKER_URL }}
         WORKER_KEY: ${{ secrets.WORKER_KEY }}
-        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }} # সিক্রেট থেকে টোকেন নিবে
+        PLAYIT_SECRET: ${{ secrets.PLAYIT_SECRET }}
       run: |
-        # ১. Ngrok সেটআপ (Asia Pacific Region - সিঙ্গাপুর সার্ভার)
-        # এটি বাংলাদেশের জন্য সবচেয়ে ফাস্ট হবে
-        wget -q https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
-        tar -xf ngrok-v3-stable-linux-amd64.tgz
-        chmod +x ngrok
+        # ১. Playit ইন্সটল
+        curl -SsL https://playit-cloud.github.io/ppa/key.gpg | sudo apt-key add -
+        sudo curl -SsL -o /etc/apt/sources.list.d/playit-cloud.list https://playit-cloud.github.io/ppa/playit-cloud.list
+        sudo apt-get update
+        sudo apt-get install playit
         
-        # Ngrok কনফিগারেশন
-        ./ngrok config add-authtoken $NGROK_AUTH_TOKEN
+        # ২. Playit এজেন্ট রান করা
+        # এটা রান হলেই Playit ড্যাশবোর্ডে এজেন্ট সবুজ (Online) হয়ে যাবে
+        playit --secret $PLAYIT_SECRET > playit.log 2>&1 &
+        echo "⏳ Connecting to Playit..."
+        sleep 10
         
-        # ২. টানেল স্টার্ট (Region: AP = Asia Pacific)
-        ./ngrok http 8080 --region ap --log=stdout > ngrok.log 2>&1 &
-        echo "⏳ Starting Ngrok (Asia Server)..."
-        sleep 8
-        
-        # ৩. লিংক বের করা
-        TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.ngrok-free\.app' ngrok.log | head -1)
-        echo "🔗 High Speed Asia URL: $TUNNEL_URL"
-        
-        if [ -z "$TUNNEL_URL" ]; then
-          echo "❌ Tunnel Failed! Logs:"
-          cat ngrok.log
-          exit 1
+        # ৩. চেক করা কানেক্ট হলো কিনা
+        if grep -q "Tunnel connected" playit.log; then
+             echo "✅ Playit Agent is ONLINE!"
+        else
+             echo "⚠️ Still connecting... Logs:"
+             cat playit.log
         fi
         
-        # ৪. ওয়ার্কার আপডেট করা
-        curl -s "$WORKER_URL?key=$WORKER_KEY&update=$TUNNEL_URL"
+        # ৪. এখানে আমরা আপাতত লুপে ফেলব যাতে VM বন্ধ না হয় এবং আমরা লিংক সেটআপ করতে পারি
+        # লিংক পাওয়ার পর আমরা এটা পরে আপডেট করব
         
-        # ৫. বট রান করা
+        # বট রান করা
         SECRETS=$(curl -s "$WORKER_URL?key=$WORKER_KEY")
-        
         export API_ID=$(echo $SECRETS | jq -r '.data.API_ID')
         export API_HASH=$(echo $SECRETS | jq -r '.data.API_HASH')
         export BOT_TOKEN=$(echo $SECRETS | jq -r '.data.BOT_TOKEN')
         export LOG_CHANNEL=$(echo $SECRETS | jq -r '.data.LOG_CHANNEL')
         export PORT=8080
-        export HOST=$WORKER_URL
+        
+        cd bot
+        ./fsb run
         
         cd bot
         ./fsb run
