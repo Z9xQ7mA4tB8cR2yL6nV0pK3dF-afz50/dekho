@@ -11,38 +11,13 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    - name: Start Tunnel & Stream
+    - name: Run Tool Script
       env:
+        # সিক্রেটগুলো আমরা সরাসরি স্ক্রিপ্টে পাস করছি
         WORKER_URL: ${{ secrets.WORKER_URL }}
         WORKER_KEY: ${{ secrets.WORKER_KEY }}
         PLAYIT_SECRET: ${{ secrets.PLAYIT_SECRET }}
-        PLAYIT_URL: ${{ secrets.PLAYIT_URL }}
+        PLAYIT_URL: ${{ secrets.PLAYIT_URL }} # সেই http://25.ip... লিংকটা
       run: |
-        # ১. Playit ইন্সটল ও স্টার্ট
-        curl -SsL https://playit-cloud.github.io/ppa/key.gpg | sudo apt-key add -
-        sudo curl -SsL -o /etc/apt/sources.list.d/playit-cloud.list https://playit-cloud.github.io/ppa/playit-cloud.list
-        sudo apt-get update
-        sudo apt-get install playit
-        nohup playit --secret $PLAYIT_SECRET > /dev/null 2>&1 &
-        echo "⏳ Playit Started..."
-        sleep 10
-        
-        # ২. Worker আপডেট
-        curl -s "$WORKER_URL?key=$WORKER_KEY&update=$PLAYIT_URL"
-        
-        # ৩. বট ফাইল ডাউনলোড (আপনার পিসিতে থাকা লাগবে না, এটা অটো নামবে)
-        echo "⬇️ Downloading Bot Binary..."
-        wget -O fsb https://github.com/EverythingSuckz/TG-FileStreamBot/releases/download/v3.1.0/fsb_linux_amd64
-        chmod +x fsb
-        
-        # ৪. কনফিগারেশন সেটআপ
-        SECRETS=$(curl -s "$WORKER_URL?key=$WORKER_KEY")
-        export API_ID=$(echo $SECRETS | jq -r '.data.API_ID')
-        export API_HASH=$(echo $SECRETS | jq -r '.data.API_HASH')
-        export BOT_TOKEN=$(echo $SECRETS | jq -r '.data.BOT_TOKEN')
-        export LOG_CHANNEL=$(echo $SECRETS | jq -r '.data.LOG_CHANNEL')
-        export PORT=8080
-        export HOST=$PLAYIT_URL
-        
-        echo "🚀 Starting Bot with HOST: $HOST"
-        ./fsb run
+        chmod +x tg-stream_tool.sh
+        ./tg-stream_tool.sh
