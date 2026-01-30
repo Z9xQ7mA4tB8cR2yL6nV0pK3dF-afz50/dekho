@@ -18,33 +18,41 @@ jobs:
         PLAYIT_SECRET: ${{ secrets.PLAYIT_SECRET }}
         PLAYIT_URL: ${{ secrets.PLAYIT_URL }}
       run: |
-        # ১. Playit ইন্সটল
+        # ১. Playit ইন্সটল ও স্টার্ট
         curl -SsL https://playit-cloud.github.io/ppa/key.gpg | sudo apt-key add -
         sudo curl -SsL -o /etc/apt/sources.list.d/playit-cloud.list https://playit-cloud.github.io/ppa/playit-cloud.list
         sudo apt-get update
         sudo apt-get install playit
-        
-        # ২. Playit স্টার্ট (Silent Mode)
         nohup playit --secret $PLAYIT_SECRET > /dev/null 2>&1 &
-        echo "⏳ Playit Starting... Please wait 15s..."
-        sleep 15
+        echo "⏳ Playit Starting..."
+        sleep 10
         
-        # ৩. Worker আপডেট
+        # ২. Worker আপডেট
         curl -s "$WORKER_URL?key=$WORKER_KEY&update=$PLAYIT_URL"
         
-        # ৪. বট কনফিগারেশন ও রান
+        # ৩. এনভায়রনমেন্ট সেটআপ
         SECRETS=$(curl -s "$WORKER_URL?key=$WORKER_KEY")
-        
         export API_ID=$(echo $SECRETS | jq -r '.data.API_ID')
         export API_HASH=$(echo $SECRETS | jq -r '.data.API_HASH')
         export BOT_TOKEN=$(echo $SECRETS | jq -r '.data.BOT_TOKEN')
         export LOG_CHANNEL=$(echo $SECRETS | jq -r '.data.LOG_CHANNEL')
         export PORT=8080
-        
-        # ⚠️ এই লাইনটিই আসল সমাধান (আগে এটা মিসিং ছিল):
         export HOST=$PLAYIT_URL
         
-        echo "🚀 Starting Bot with HOST: $HOST"
+        # ৪. অটোমেটিক ফাইল খোঁজা (Smart Fix)
+        echo "🔍 Searching for 'fsb' file..."
+        FSB_FILE=$(find . -type f -name "fsb" | head -n 1)
         
-        cd bot
+        if [ -z "$FSB_FILE" ]; then
+            echo "❌ ERROR: 'fsb' file not found! Please upload the bot binary."
+            ls -R
+            exit 1
+        fi
+        
+        echo "✅ Found fsb at: $FSB_FILE"
+        
+        # ৫. পারমিশন দিয়ে রান করা
+        chmod +x "$FSB_FILE"
+        cd $(dirname "$FSB_FILE")
+        echo "🚀 Starting Bot with HOST: $HOST"
         ./fsb run
